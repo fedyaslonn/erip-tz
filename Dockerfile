@@ -14,6 +14,7 @@ COPY --from=builder /opt/venv /opt/venv
 ENV VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 COPY . .
+COPY entrypoint.sh /entrypoint.sh
 
-RUN sed -i 's/\r$//' /app/entrypoint.sh
-ENTRYPOINT ["sh", "/app/entrypoint.sh"]
+RUN sed -i 's/\r$//' /entrypoint.sh
+ENTRYPOINT ["sh", "/entrypoint.sh"]

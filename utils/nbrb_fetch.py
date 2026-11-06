@@ -21,6 +21,7 @@ def fetch_nbrb_rates_sync(rate_date: date) -> list[dict]:
     base_url = os.getenv("NBRB_API_URL")
 
     url = f"{base_url}?periodicity=0&ondate={rate_date.isoformat()}"
+    logger.info("Requesting NBRB exchange rates for %s", rate_date)
 
     with urllib.request.urlopen(url, timeout=10) as response:
         data = json.loads(response.read().decode("utf-8"), parse_float=Decimal)
@@ -28,6 +29,7 @@ def fetch_nbrb_rates_sync(rate_date: date) -> list[dict]:
     if not isinstance(data, list) or not data:
         raise ValueError("NBRB returned an empty or invalid rate list")
 
+    logger.info("Received %s exchange rates from NBRB", len(data))
     rates = [NBRBRateSchema.model_validate(item) for item in data]
     if any(rate.date.date() != rate_date for rate in rates):
         raise ValueError("NBRB returned rates for a different date")
@@ -54,6 +56,7 @@ async def sync_daily_rates_task(executor: ThreadPoolExecutor) -> None:
         )
 
         async with SQLAlchemyUnitOfWork(async_session_maker) as uow:
+            logger.info("Saving %s NBRB exchange rates to the database", len(rates))
             await uow.rates.save_daily(rates)
 
         logger.info("Saved %s NBRB rates for %s", len(rates), rate_date)
