@@ -1,4 +1,5 @@
 import uuid
+import logging
 from collections import defaultdict
 from zoneinfo import ZoneInfo
 from datetime import timedelta, datetime, time, date
@@ -11,6 +12,8 @@ from sqlalchemy import select, func, or_
 from domain.schemas.stats import CurrencyAggregatedStats
 from persistence.models import ExchangeTransaction, TransactionStatus, ExchangeRate
 
+logger = logging.getLogger(__name__)
+
 
 class RateRepository:
     def __init__(self, session: AsyncSession):
@@ -19,6 +22,11 @@ class RateRepository:
     async def get_by_date(
         self, rate_date: date, currency_code: str
     ) -> ExchangeRate | None:
+        logger.info(
+            "Fetching exchange rate from the database: currency=%s date=%s",
+            currency_code,
+            rate_date,
+        )
         result = await self.session.execute(
             select(ExchangeRate).where(
                 ExchangeRate.rate_date == rate_date,
@@ -28,12 +36,14 @@ class RateRepository:
         return result.scalar_one_or_none()
 
     async def get_all_by_date(self, rate_date: date) -> list[ExchangeRate]:
+        logger.info("Fetching all exchange rates from the database for %s", rate_date)
         result = await self.session.execute(
             select(ExchangeRate).where(ExchangeRate.rate_date == rate_date)
         )
         return list(result.scalars().all())
 
     async def get_latest_date(self, today: date) -> date | None:
+        logger.info("Fetching the latest exchange rate date not later than %s", today)
         result = await self.session.execute(
             select(func.max(ExchangeRate.rate_date)).where(
                 ExchangeRate.rate_date <= today
@@ -42,17 +52,25 @@ class RateRepository:
         return result.scalar_one_or_none()
 
     async def save_daily(self, rates: list[dict]) -> None:
+        logger.info("Saving %s daily exchange rates to the database", len(rates))
         stmt = (
             insert(ExchangeRate)
             .values(rates)
             .on_conflict_do_nothing(constraint="uq_currency_rate_date")
         )
         await self.session.execute(stmt)
+        logger.info("Daily exchange rate insert completed")
 
     def add(self, rate: ExchangeRate) -> None:
+        logger.info(
+            "Adding exchange rate to the database session: currency=%s date=%s",
+            rate.currency_code,
+            rate.rate_date,
+        )
         self.session.add(rate)
 
     def add_all(self, rates: list[ExchangeRate]) -> None:
+        logger.info("Adding %s exchange rates to the database session", len(rates))
         self.session.add_all(rates)
 
 
@@ -71,13 +89,16 @@ class TransactionRepository:
         return result.scalar_one_or_none()
 
     async def get_pending_deals(self) -> list[ExchangeTransaction]:
+        logger.info("Fetching pending transactions from the database")
         stmt = (
             select(ExchangeTransaction)
             .where(ExchangeTransaction.status == TransactionStatus.PENDING)
             .order_by(ExchangeTransaction.created_at, ExchangeTransaction.id)
         )
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        transactions = list(result.scalars().all())
+        logger.info("Fetched %s pending transactions", len(transactions))
+        return transactions
 
     async def get_stats(
         self, date_from: date, date_to: date, currency: str | None = None
@@ -127,10 +148,12 @@ class TransactionRepository:
         if currency:
             stats = {k: v for k, v in stats.items() if k == currency}
 
-        return [
+        result_stats = [
             CurrencyAggregatedStats(currency=curr, **data)
             for curr, data in stats.items()
         ]
+        logger.info("Fetched statistics for %s currencies", len(result_stats))
+        return result_stats
 
     def add(self, transaction: ExchangeTransaction) -> None:
         self.session.add(transaction)
