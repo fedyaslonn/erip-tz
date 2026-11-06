@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.venv
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+.idea/
+.mypy_cache/
+conftest.py
